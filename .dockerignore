@@ -1,0 +1,15 @@
+.git
+.gradle
+build
+out
+.idea
+.vscode
+*.iml
+*.log
+.env
+.env.local
+secrets/
+firebase-credentials*.json
+!firebase-credentials.example.json
+Thumbs.db
+.DS_Store

@@ -1,0 +1,138 @@
+spring:
+  application:
+    name: notification-service
+
+  # ---- Graceful shutdown ----
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  # ---- PostgreSQL (in-app notification inbox) ----
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5435/notification}
+    username: ${DB_USERNAME:notification}
+    password: ${DB_PASSWORD:notification}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 5000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  # ---- RabbitMQ ----
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    listener:
+      simple:
+        acknowledge-mode: auto
+        retry:
+          enabled: true
+          initial-interval: 2s
+          max-attempts: 3
+          multiplier: 2.0
+          max-interval: 10s
+
+  # ---- Redis (idempotency cache) ----
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      lettuce:
+        shutdown-timeout: 200ms
+
+  # ---- SMTP ----
+  mail:
+    host: ${SMTP_HOST:smtp.gmail.com}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  # ---- Thymeleaf ----
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+    cache: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+
+# ---- Notification service domain config ----
+notification:
+  mail:
+    from: ${MAIL_FROM:no-reply@umatter.app}
+    from-name: ${MAIL_FROM_NAME:uMatter}
+
+  idempotency:
+    ttl-hours: 24
+    key-prefix: notif:idemp
+
+  firebase:
+    enabled: ${FIREBASE_ENABLED:true}
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
+
+  rabbit:
+    booking:
+      exchange: booking.exchange
+      routing-key: appointment.booked
+      queue: notification.booking.booked.q
+      dlx-exchange: booking.dlx
+      dlq-queue: notification.booking.booked.dlq
+    tracking:
+      exchange: tracking.exchange
+      routing-key: streak.milestone
+      queue: notification.tracking.streak.q
+      dlx-exchange: tracking.dlx
+      dlq-queue: notification.tracking.streak.dlq
+    social:
+      exchange: social.exchange
+      routing-key: message.missed
+      queue: notification.social.message-missed.q
+      dlx-exchange: social.dlx
+      dlq-queue: notification.social.message-missed.dlq
+
+logging:
+  level:
+    com.umatter.notification: INFO
+    org.springframework.amqp: INFO
