@@ -3,8 +3,8 @@ services:
     image: rabbitmq:3.13-management-alpine
     container_name: umatter-rabbitmq
     ports:
-      - "5672:5672"     # AMQP
-      - "15672:15672"   # Management UI
+      - "5673:5672"     # AMQP (host 5673 -> container 5672, avoids collision with sibling services)
+      - "15673:15672"   # Management UI (host 15673 -> container 15672)
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
@@ -21,7 +21,7 @@ services:
     image: redis:7-alpine
     container_name: umatter-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
     volumes:
       - redis-data:/data
@@ -69,6 +69,9 @@ services:
       RABBITMQ_HOST: rabbitmq
       REDIS_HOST: redis
       DB_URL: jdbc:postgresql://notification-postgres:5432/${DB_NAME:-notification}
+      # Always bind to 8080 INSIDE the container. The host-side port is set
+      # separately via the ports mapping below (driven by SERVER_PORT in .env).
+      SERVER_PORT: "8080"
       SPRING_PROFILES_ACTIVE: docker
     ports:
       - "${SERVER_PORT:-8080}:8080"
