@@ -110,6 +110,13 @@ management:
 
 # ---- Notification service domain config ----
 notification:
+  # JWTs are issued by the Auth service and verified here with its RSA public key.
+  # Keep these values in sync with the Auth service's mhsa.app.jwtIssuer / jwtAudience.
+  jwt:
+    public-key: ${JWT_PUBLIC_KEY:}
+    issuer: ${JWT_ISSUER:mhsa-auth}
+    audience: ${JWT_AUDIENCE:mhsa-api}
+
   mail:
     from: ${MAIL_FROM:no-reply@umatter.app}
     from-name: ${MAIL_FROM_NAME:uMatter}
