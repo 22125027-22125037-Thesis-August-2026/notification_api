@@ -63,6 +63,9 @@ their string values come from `notification.rabbit.*` in
 
 ### Event payload contract
 
+Producers carry **profile_id**, not device tokens. Token-to-device routing is
+the Notification Service's responsibility (see §3a, `device_tokens`).
+
 Every payload implements [`NotificationEnvelope`](src/main/java/com/umatter/notification/dto/NotificationEnvelope.java)
 and MUST carry:
 
@@ -136,8 +139,15 @@ and route the message to DLQ.
 
 The service owns a dedicated PostgreSQL database (`notification`) on host port
 **5435** (chosen to avoid colliding with the Auth and Booking DBs in the wider
-uMatter platform). The schema is managed by **Flyway**; the bootstrap migration
-is [`V1__init_notification_schema.sql`](src/main/resources/db/migration/V1__init_notification_schema.sql).
+uMatter platform). The schema is managed by **Flyway**:
+
+- [`V1__init_notification_schema.sql`](src/main/resources/db/migration/V1__init_notification_schema.sql) — `in_app_notifications` table
+- [`V2__add_types_and_seed_data.sql`](src/main/resources/db/migration/V2__add_types_and_seed_data.sql) — adds `REMINDER`/`INSIGHT` to the type CHECK + seeds Figma demo rows
+- [`V3__create_device_tokens_table.sql`](src/main/resources/db/migration/V3__create_device_tokens_table.sql) — `device_tokens` table
+
+The service owns **exactly two tables**: `in_app_notifications` (the inbox)
+and `device_tokens` (FCM routing registry). It does not own user accounts,
+bookings, streaks, or chats — those still live in their producing domains.
 
 ### Table: `in_app_notifications`
 
@@ -163,20 +173,55 @@ JPA model:
 Business operations are wrapped by
 [`NotificationHistoryService`](src/main/java/com/umatter/notification/service/NotificationHistoryService.java).
 
-### Consumer dual-action
+### Table: `device_tokens`
 
-Every consumer follows the same three-step flow:
+The mobile app registers its FCM token here on login (and on token-refresh).
+The consumers look the registered tokens up by `profile_id` when fanning out a
+push — producers (Booking/Tracking/Social) never need to know the token.
+
+| Column          | Type           | Notes                                                |
+|-----------------|----------------|------------------------------------------------------|
+| `device_token`  | `TEXT PK`      | FCM token; globally unique (Firebase guarantee)      |
+| `profile_id`    | `UUID`         | the user this device belongs to                      |
+| `platform`      | `VARCHAR(16)`  | `ANDROID`, `IOS`, or `WEB` (CHECK constraint)        |
+| `created_at`    | `TIMESTAMPTZ`  | when the token was first registered                  |
+| `last_seen_at`  | `TIMESTAMPTZ`  | refreshed on every re-register                       |
+
+Index: `idx_device_tokens_profile_id` on `profile_id`.
+
+A single profile can have multiple rows (phone + tablet + web). Re-registering
+the same token under a different profile is a simple UPDATE — that handles the
+"sign out → different user signs in on the same device" case.
+
+JPA model:
+[`DeviceToken`](src/main/java/com/umatter/notification/persistence/DeviceToken.java)
++ [`DeviceTokenRepository`](src/main/java/com/umatter/notification/persistence/DeviceTokenRepository.java).
+Business operations are wrapped by
+[`DeviceTokenService`](src/main/java/com/umatter/notification/service/DeviceTokenService.java).
+
+### Consumer flow
+
+Every consumer follows the same shape:
 
 ```
-1. idempotency.tryAcquire(scope, messageId)   # Redis; short-circuit on duplicate
-2. historyService.save(profileId, type, ...)  # Postgres; commits inbox row
-3. dispatcher.send(...)                       # Email or FCM
+1. idempotency.tryAcquire(scope, messageId)         # Redis; short-circuit on duplicate
+2. historyService.save(profileId, type, ...)        # Postgres; commits inbox row
+3. dispatch:
+     - booking  → emailDispatcher.send(...)         # SMTP
+     - tracking → for each registered token: push   # FCM fan-out
+     - social   → for each registered token: push   # FCM fan-out
 ```
 
-If step 2 throws → message goes to DLQ; no email/push sent.
-If step 3 throws → DB row already committed; message goes to DLQ. The user has
-an inbox record even though the email/push failed — this is intentional, so the
-in-app surface stays consistent with what the system *intended* to send.
+For the push consumers, step 3 looks up `device_tokens` by `profile_id` and
+iterates — one dead/invalid token logs a warning but **does not fail** the
+event, since the inbox row is the authoritative record. A profile with zero
+registered devices logs an info line and proceeds (the user will still see
+the row when they open the app).
+
+Failure semantics:
+- Step 2 throws → message goes to DLQ; no email/push sent.
+- Step 3 (whole batch fails for booking, or unhandled error for push) →
+  DB row already committed; message goes to DLQ.
 
 ---
 
@@ -191,6 +236,8 @@ All endpoints return JSON.
 | GET    | `/api/v1/notifications/{profileId}`   | Paginated inbox for the user, newest first          |
 | PUT    | `/api/v1/notifications/{notificationId}/read` | Mark one notification as read              |
 | PUT    | `/api/v1/notifications/{profileId}/read-all`  | Mark every notification for that user read |
+| POST   | `/api/v1/devices`                     | Register/refresh an FCM device token (idempotent)   |
+| DELETE | `/api/v1/devices/{deviceToken}`       | Deregister a device (logout, token invalidation)    |
 
 ### `GET /api/v1/notifications/{profileId}`
 
@@ -225,6 +272,24 @@ Returns a Spring `Page<InAppNotificationDto>`:
 
 ### `PUT /api/v1/notifications/{profileId}/read-all`
 - `200 OK` with `{ "profileId": "...", "updatedCount": N }`.
+
+### `POST /api/v1/devices`
+Request body:
+```json
+{
+  "profileId": "e1d0add5-b9c8-57b5-36e6-059991832f17",
+  "deviceToken": "fcm-token-from-the-mobile-app",
+  "platform": "ANDROID"
+}
+```
+- `201 Created` with `{ "profileId": "...", "platform": "...", "lastSeenAt": "..." }`.
+- Idempotent: calling again with the same `deviceToken` re-binds the profile
+  (handles "different user signs in on this device") and refreshes
+  `lastSeenAt`.
+
+### `DELETE /api/v1/devices/{deviceToken}`
+- `204 No Content` on successful removal.
+- `404 Not Found` if the token wasn't registered.
 
 ---
 

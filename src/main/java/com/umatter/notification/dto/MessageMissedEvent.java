@@ -25,9 +25,6 @@ public class MessageMissedEvent implements NotificationEnvelope {
     private String profileId;
 
     @NotBlank
-    private String deviceToken;
-
-    @NotBlank
     private String senderName;
 
     @NotBlank

@@ -25,9 +25,6 @@ public class StreakMilestoneEvent implements NotificationEnvelope {
     @NotBlank
     private String profileId;
 
-    @NotBlank
-    private String deviceToken;
-
     @Min(1)
     private int streakCount;
 
