@@ -22,8 +22,10 @@ import java.util.Locale;
 @EnableConfigurationProperties(MailProperties.class)
 public class EmailDispatcherService {
 
+    // Pattern uses `XXX` (offset like +07:00) instead of `z` (zone name), because
+    // the incoming startTime is an OffsetDateTime — it carries an offset, not a ZoneId.
     private static final DateTimeFormatter HUMAN_DT =
-            DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy 'at' HH:mm z", Locale.ENGLISH);
+            DateTimeFormatter.ofPattern("EEEE, dd MMM yyyy 'at' HH:mm XXX", Locale.ENGLISH);
 
     private final JavaMailSender mailSender;
     private final SpringTemplateEngine templateEngine;

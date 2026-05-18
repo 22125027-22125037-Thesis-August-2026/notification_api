@@ -20,7 +20,7 @@ public class BookingNotificationConsumer {
 
     private static final String SCOPE = "appointment.booked";
     private static final DateTimeFormatter HUMAN_DT =
-            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy 'at' HH:mm z", Locale.ENGLISH);
+            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy 'at' HH:mm XXX", Locale.ENGLISH);
 
     private final IdempotencyService idempotency;
     private final NotificationHistoryService history;
