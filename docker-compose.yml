@@ -3,8 +3,8 @@ services:
     image: rabbitmq:3.13-management-alpine
     container_name: umatter-rabbitmq
     ports:
-      - "5673:5672"     # AMQP (host 5673 -> container 5672, avoids collision with sibling services)
-      - "15673:15672"   # Management UI (host 15673 -> container 15672)
+      - "5676:5672"     # AMQP (host 5676 -> container 5672, per uMatter Azure port map)
+      - "15676:15672"   # Management UI (host 15676 -> container 15672, per uMatter Azure port map)
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
@@ -36,8 +36,8 @@ services:
     image: postgres:16-alpine
     container_name: notification-postgres
     ports:
-      # Host port 5435 -> container 5432, to avoid collisions with Auth/Booking DBs.
-      - "5435:5432"
+      # Host port 5436 -> container 5432, per uMatter Azure port map.
+      - "5436:5432"
     environment:
       POSTGRES_DB: ${DB_NAME:-notification}
       POSTGRES_USER: ${DB_USERNAME:-notification}
@@ -49,6 +49,24 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  notification-pgadmin:
+    image: dpage/pgadmin4
+    container_name: notification-pgadmin
+    ports:
+      - "5054:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@umatter.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      # Disable master-password / server-mode prompts for local dev.
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    volumes:
+      - notification-pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      notification-postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   notification-service:
@@ -85,3 +103,4 @@ volumes:
   rabbitmq-data:
   redis-data:
   notification-postgres-data:
+  notification-pgadmin-data:
