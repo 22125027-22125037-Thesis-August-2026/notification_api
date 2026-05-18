@@ -25,7 +25,6 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
-        dialect: org.hibernate.dialect.PostgreSQLDialect
 
   flyway:
     enabled: true
@@ -58,6 +57,11 @@ spring:
       timeout: 2s
       lettuce:
         shutdown-timeout: 200ms
+      repositories:
+        # We use Redis only as a key/value cache for idempotency; no @RedisHash
+        # entities. Disabling repo auto-scan suppresses a spurious warning about
+        # JPA repositories being mis-classified as Redis ones.
+        enabled: false
 
   # ---- SMTP ----
   mail:
@@ -94,9 +98,15 @@ management:
         include: health,info,metrics
   endpoint:
     health:
-      show-details: when-authorized
+      show-details: always
       probes:
         enabled: true
+  health:
+    # SMTP creds are intentionally absent in local dev; the indicator would
+    # report DOWN and drag the composite status down for no useful signal.
+    # Flip back to true (or remove this line) once real SMTP is wired.
+    mail:
+      enabled: false
 
 # ---- Notification service domain config ----
 notification:

@@ -13,6 +13,8 @@ import org.springframework.util.StringUtils;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 @Slf4j
 @Configuration
@@ -36,7 +38,18 @@ public class FirebaseConfig {
             return null;
         }
 
-        try (InputStream is = new FileInputStream(props.getCredentialsPath())) {
+        Path credentialsFile = Path.of(props.getCredentialsPath());
+        if (!Files.isRegularFile(credentialsFile)) {
+            // Treat a missing creds file as "skip" rather than blowing up the whole app context.
+            // This lets the service boot in dev without Firebase even if someone forgets to flip
+            // FIREBASE_ENABLED=false. Logs are loud so it's not silently ignored in prod.
+            log.warn("Firebase credentials file not found at {} — push notifications will be skipped. "
+                    + "Set FIREBASE_ENABLED=false to suppress this warning, or mount the JSON.",
+                    credentialsFile);
+            return null;
+        }
+
+        try (InputStream is = new FileInputStream(credentialsFile.toFile())) {
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(is))
                     .build();
