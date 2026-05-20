@@ -50,3 +50,4 @@ firebase-credentials*.json
 *.log
 logs/
 .claude/settings.local.json
+.env.local-bak-20260520

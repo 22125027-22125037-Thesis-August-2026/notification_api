@@ -3,8 +3,8 @@ services:
     image: rabbitmq:3.13-management-alpine
     container_name: umatter-rabbitmq
     ports:
-      - "5676:5672"     # AMQP (host 5676 -> container 5672, per uMatter Azure port map)
-      - "15676:15672"   # Management UI (host 15676 -> container 15672, per uMatter Azure port map)
+      - "5672:5672"     # AMQP (host 5672 -> container 5672, per uMatter unified port map)
+      - "15672:15672"   # Management UI (host 15672 -> container 15672, per uMatter unified port map)
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
@@ -21,7 +21,7 @@ services:
     image: redis:7-alpine
     container_name: umatter-redis
     ports:
-      - "6380:6379"
+      - "6372:6379"
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
     volumes:
       - redis-data:/data
@@ -36,8 +36,8 @@ services:
     image: postgres:16-alpine
     container_name: notification-postgres
     ports:
-      # Host port 5436 -> container 5432, per uMatter Azure port map.
-      - "5436:5432"
+      # Host port 5432 -> container 5432, per uMatter unified port map.
+      - "5432:5432"
     environment:
       POSTGRES_DB: ${DB_NAME:-notification}
       POSTGRES_USER: ${DB_USERNAME:-notification}
@@ -55,7 +55,7 @@ services:
     image: dpage/pgadmin4
     container_name: notification-pgadmin
     ports:
-      - "5054:80"
+      - "5052:80"
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@umatter.app}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
