@@ -1,22 +1,6 @@
 services:
-  rabbitmq:
-    image: rabbitmq:3.13-management-alpine
-    container_name: umatter-rabbitmq
-    ports:
-      - "5672:5672"     # AMQP (host 5672 -> container 5672, per uMatter unified port map)
-      - "15672:15672"   # Management UI (host 15672 -> container 15672, per uMatter unified port map)
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
+  # NOTE: This service no longer runs its own RabbitMQ broker. Domain events are
+  # published to / consumed from the shared Auth Service broker (host port 5671).
   redis:
     image: redis:7-alpine
     container_name: umatter-redis
@@ -75,8 +59,6 @@ services:
       dockerfile: Dockerfile
     container_name: umatter-notification-service
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       redis:
         condition: service_healthy
       notification-postgres:
@@ -84,13 +66,19 @@ services:
     env_file:
       - .env
     environment:
-      RABBITMQ_HOST: rabbitmq
+      # Shared Auth Service broker, reached via the host gateway + published port.
+      RABBITMQ_HOST: host.docker.internal
+      RABBITMQ_PORT: "5671"
       REDIS_HOST: redis
       DB_URL: jdbc:postgresql://notification-postgres:5432/${DB_NAME:-notification}
       # Always bind to 8080 INSIDE the container. The host-side port is set
       # separately via the ports mapping below (driven by SERVER_PORT in .env).
       SERVER_PORT: "8080"
       SPRING_PROFILES_ACTIVE: docker
+    # Resolve host.docker.internal to the host gateway so the container can
+    # reach Auth Service's RabbitMQ on the host-published port (5671).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${SERVER_PORT:-8080}:8080"
     volumes:
@@ -100,7 +88,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  rabbitmq-data:
   redis-data:
   notification-postgres-data:
   notification-pgadmin-data:
