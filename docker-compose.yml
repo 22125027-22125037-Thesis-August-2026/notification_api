@@ -39,26 +39,6 @@ services:
       retries: 10
     restart: unless-stopped
 
-  notification-pgadmin:
-    image: dpage/pgadmin4
-    container_name: notification-pgadmin
-    networks:
-      - notification-bridge
-    ports:
-      - "5052:80"
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@umatter.app}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
-      # Disable master-password / server-mode prompts for local dev.
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
-    volumes:
-      - notification-pgadmin-data:/var/lib/pgadmin
-    depends_on:
-      notification-postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
   notification-service:
     build:
       context: .
@@ -82,14 +62,14 @@ services:
       DB_URL: jdbc:postgresql://notification-postgres:5432/${DB_NAME:-notification}
       # Always bind to 8080 INSIDE the container. The host-side port is set
       # separately via the ports mapping below (driven by SERVER_PORT in .env).
-      SERVER_PORT: "8087"
+      SERVER_PORT: "8082"
       SPRING_PROFILES_ACTIVE: docker
     # Resolve host.docker.internal to the host gateway so the container can
     # reach Auth Service's RabbitMQ on the host-published port (5671).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${SERVER_PORT:-8082}:8087"
+      - "8082:8082"
     volumes:
       # Mount Firebase Admin SDK credentials read-only into the container.
       # Place your JSON at ./secrets/firebase-credentials.json on the host.
@@ -99,7 +79,6 @@ services:
 volumes:
   redis-data:
   notification-postgres-data:
-  notification-pgadmin-data:
 
 networks:
   notification-bridge:
