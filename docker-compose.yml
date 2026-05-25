@@ -73,14 +73,14 @@ services:
       DB_URL: jdbc:postgresql://notification-postgres:5432/${DB_NAME:-notification}
       # Always bind to 8080 INSIDE the container. The host-side port is set
       # separately via the ports mapping below (driven by SERVER_PORT in .env).
-      SERVER_PORT: "8080"
+      SERVER_PORT: "8087"
       SPRING_PROFILES_ACTIVE: docker
     # Resolve host.docker.internal to the host gateway so the container can
     # reach Auth Service's RabbitMQ on the host-published port (5671).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      - "${SERVER_PORT:-8082}:8087"
     volumes:
       # Mount Firebase Admin SDK credentials read-only into the container.
       # Place your JSON at ./secrets/firebase-credentials.json on the host.
