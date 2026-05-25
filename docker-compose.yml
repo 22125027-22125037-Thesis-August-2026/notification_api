@@ -4,6 +4,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: umatter-redis
+    networks:
+      - notification-bridge
     ports:
       - "6372:6379"
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
@@ -19,6 +21,8 @@ services:
   notification-postgres:
     image: postgres:16-alpine
     container_name: notification-postgres
+    networks:
+      - notification-bridge
     ports:
       # Host port 5432 -> container 5432, per uMatter unified port map.
       - "5432:5432"
@@ -38,6 +42,8 @@ services:
   notification-pgadmin:
     image: dpage/pgadmin4
     container_name: notification-pgadmin
+    networks:
+      - notification-bridge
     ports:
       - "5052:80"
     environment:
@@ -58,6 +64,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: umatter-notification-service
+    networks:
+      - notification-bridge
+      - umatter-shared
     depends_on:
       redis:
         condition: service_healthy
@@ -86,8 +95,6 @@ services:
       # Place your JSON at ./secrets/firebase-credentials.json on the host.
       - ./secrets:/app/secrets:ro
     restart: unless-stopped
-    networks:
-      - umatter-shared
 
 volumes:
   redis-data:
@@ -95,5 +102,7 @@ volumes:
   notification-pgadmin-data:
 
 networks:
- umatter-shared:
+  notification-bridge:
+    driver: bridge
+  umatter-shared:
     external: true
