@@ -30,19 +30,16 @@ round-trip correctly without any encoding flags.
 
 ## 2. Authentication
 
-**Current state (May 2026):** the API is open — no `Authorization` header is required or checked. This will change.
-
-**Planned (before any non-local deployment):** every request must carry
+**Current state (May 2026):** all API endpoints are protected by Spring Security.
+Every request (except explicitly public endpoints like `/actuator/**` and `/error`) must carry:
 ```
 Authorization: Bearer <JWT>
 ```
 issued by the uMatter Auth service. Authorization rule:
-> The JWT's `profileId` claim must match the `{profileId}` in the URL/body **OR** the JWT must carry `role: ADMIN`.
+> The JWT's `profileId` claim must match the resource owner **OR** the JWT must carry `role: ADMIN`.
 
-For the device registration endpoint, the `profileId` field will eventually be
-**dropped from the request body** and read from the JWT claim instead — so you
-don't have to send it twice. Build your client with that future in mind: keep
-the JWT-fetching logic in one place so swapping it in later is one diff.
+For `POST /api/v1/devices`, `profileId` is already read from the JWT claim and
+is not accepted in the request body.
 
 ---
 
@@ -129,13 +126,17 @@ The fields you actually need on the frontend are highlighted in bold:
 
 **Example**
 ```bash
-curl "http://localhost:8084/api/v1/notifications/e1d0add5-b9c8-57b5-36e6-059991832f17?page=0&size=20"
+curl "http://localhost:8084/api/v1/notifications/e1d0add5-b9c8-57b5-36e6-059991832f17?page=0&size=20" \
+  -H "Authorization: Bearer <JWT>"
 ```
 
 ```typescript
 // fetch
 const res = await fetch(
-  `${BASE_URL}/api/v1/notifications/${profileId}?page=0&size=20`
+  `${BASE_URL}/api/v1/notifications/${profileId}?page=0&size=20`,
+  {
+    headers: { Authorization: `Bearer ${token}` },
+  }
 );
 const { content, totalElements, last } = await res.json();
 ```
@@ -169,7 +170,8 @@ already-read row still returns `200 OK`.
 
 **Example**
 ```bash
-curl -X PUT "http://localhost:8084/api/v1/notifications/1c68d9ce-a9ad-45b3-9e30-a7e77718071e/read"
+curl -X PUT "http://localhost:8084/api/v1/notifications/1c68d9ce-a9ad-45b3-9e30-a7e77718071e/read" \
+  -H "Authorization: Bearer <JWT>"
 ```
 
 ---
@@ -197,7 +199,8 @@ Mark every unread notification for the given profile as read. Useful for the
 
 **Example**
 ```bash
-curl -X PUT "http://localhost:8084/api/v1/notifications/e1d0add5-b9c8-57b5-36e6-059991832f17/read-all"
+curl -X PUT "http://localhost:8084/api/v1/notifications/e1d0add5-b9c8-57b5-36e6-059991832f17/read-all" \
+  -H "Authorization: Bearer <JWT>"
 ```
 
 ---
@@ -212,7 +215,6 @@ profile in place.
 
 ```json
 {
-  "profileId":   "e1d0add5-b9c8-57b5-36e6-059991832f17",
   "deviceToken": "<the long string from Firebase messaging().getToken()>",
   "platform":    "ANDROID"
 }
@@ -222,7 +224,6 @@ profile in place.
 
 | Field         | Type   | Required | Notes |
 |---------------|--------|----------|-------|
-| `profileId`   | UUID   | yes      | Current logged-in user *(will be dropped once JWT auth lands — read from token instead)* |
 | `deviceToken` | string | yes      | From the Firebase SDK on the mobile device |
 | `platform`    | enum   | yes      | One of `ANDROID`, `IOS`, `WEB` |
 
@@ -239,11 +240,13 @@ profile in place.
 
 | Status | Meaning |
 |--------|---------|
-| `400 Bad Request` | Missing/blank `profileId`, `deviceToken`, or invalid `platform` |
+| `400 Bad Request` | Missing/blank `deviceToken` or invalid `platform` |
+| `401 Unauthorized` | Missing/invalid Bearer token |
+| `403 Forbidden` | Token is valid but missing required claims (for example `profileId`) |
 
 **When to call this from the mobile app**
 
-1. **On login** (after you have the user's `profileId`):
+1. **On login** (after you have the JWT):
    - Request FCM permission (iOS: native prompt; Android 13+: native prompt)
    - If granted → `messaging().getToken()` → POST here
 2. **On Firebase's token-refresh callback** (Firebase rotates tokens periodically):
@@ -254,9 +257,9 @@ profile in place.
 **Example**
 ```bash
 curl -X POST "http://localhost:8084/api/v1/devices" \
+  -H "Authorization: Bearer <JWT>" \
   -H "Content-Type: application/json" \
   -d '{
-    "profileId": "e1d0add5-b9c8-57b5-36e6-059991832f17",
     "deviceToken": "dGhpcy1pcy1mYWtlLWZjbS10b2tlbg",
     "platform": "ANDROID"
   }'
@@ -286,7 +289,8 @@ Deregister an FCM token. Call this on logout.
 
 **Example**
 ```bash
-curl -X DELETE "http://localhost:8084/api/v1/devices/dGhpcy1pcy1mYWtlLWZjbS10b2tlbg"
+curl -X DELETE "http://localhost:8084/api/v1/devices/dGhpcy1pcy1mYWtlLWZjbS10b2tlbg" \
+  -H "Authorization: Bearer <JWT>"
 ```
 
 ---
@@ -317,12 +321,12 @@ Returns `503 Service Unavailable` (still with a JSON body) when any dependency i
 ### 5.1 — App boot / login
 
 ```
-1. Authenticate user      → get profileId (and eventually JWT)
+1. Authenticate user      → get JWT (includes `profileId` claim)
 2. Fetch inbox            → GET /api/v1/notifications/{profileId}?page=0&size=20
 3. Ask FCM permission     → Firebase SDK
 4. If granted:
      a. messaging().getToken()
-     b. POST /api/v1/devices  { profileId, deviceToken, platform }
+  b. POST /api/v1/devices  { deviceToken, platform }
 5. Subscribe to Firebase onTokenRefresh → re-POST the new token
 6. Subscribe to Firebase onMessage      → update local state / show in-app banner
 ```
@@ -422,7 +426,7 @@ is idempotent and refreshing `lastSeenAt` is a feature, not a bug). The
 different user, and on every Firebase token-refresh callback.
 
 **Q: The server returned a `400` from `POST /api/v1/devices` but my JSON looks fine.**
-A: Most common cause: `platform` value isn't one of `ANDROID | IOS | WEB` (case-sensitive, uppercase). Second most common: `profileId` not a valid UUID.
+A: Most common cause: `platform` value isn't one of `ANDROID | IOS | WEB` (case-sensitive, uppercase). Also check `deviceToken` is non-empty.
 
 ---
 
