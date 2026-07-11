@@ -1,14 +1,18 @@
+# Memory ceilings target an 8 GiB host shared with the other three stacks. JAVA_TOOL_OPTIONS
+# uses MaxRAMPercentage rather than a literal -Xmx so the heap is derived from mem_limit (the
+# JVM reads the cgroup) and the two cannot drift apart.
 services:
   # NOTE: This service no longer runs its own RabbitMQ broker. Domain events are
   # published to / consumed from the shared Auth Service broker (host port 5671).
   redis:
     image: redis:7-alpine
     container_name: umatter-redis
+    mem_limit: 128m
     networks:
       - notification-bridge
     ports:
       - "6372:6379"
-    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis-data:/data
     healthcheck:
@@ -21,6 +25,8 @@ services:
   notification-postgres:
     image: postgres:16-alpine
     container_name: notification-postgres
+    mem_limit: 256m
+    command: postgres -c shared_buffers=32MB -c max_connections=50
     networks:
       - notification-bridge
     ports:
@@ -44,6 +50,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: umatter-notification-service
+    mem_limit: 640m
     networks:
       - notification-bridge
       - umatter-shared
@@ -55,6 +62,7 @@ services:
     env_file:
       - .env
     environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=60 -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC -Xss512k"
       # Shared Auth Service broker, reached via the host gateway + published port.
       RABBITMQ_HOST: host.docker.internal
       RABBITMQ_PORT: "5671"
