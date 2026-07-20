@@ -100,79 +100,8 @@ public class RabbitConfig {
                 .with(topology.getBooking().getRoutingKey());
     }
 
-    // -------------------- TRACKING DOMAIN --------------------
-    @Bean
-    public TopicExchange trackingExchange() {
-        return new TopicExchange(topology.getTracking().getExchange(), true, false);
-    }
-
-    @Bean
-    public TopicExchange trackingDlx() {
-        return new TopicExchange(topology.getTracking().getDlxExchange(), true, false);
-    }
-
-    @Bean
-    public Queue trackingQueue() {
-        return QueueBuilder.durable(topology.getTracking().getQueue())
-                .withArgument("x-dead-letter-exchange", topology.getTracking().getDlxExchange())
-                .withArgument("x-dead-letter-routing-key", topology.getTracking().getRoutingKey())
-                .build();
-    }
-
-    @Bean
-    public Queue trackingDlq() {
-        return QueueBuilder.durable(topology.getTracking().getDlqQueue()).build();
-    }
-
-    @Bean
-    public Binding trackingBinding() {
-        return BindingBuilder.bind(trackingQueue())
-                .to(trackingExchange())
-                .with(topology.getTracking().getRoutingKey());
-    }
-
-    @Bean
-    public Binding trackingDlqBinding() {
-        return BindingBuilder.bind(trackingDlq())
-                .to(trackingDlx())
-                .with(topology.getTracking().getRoutingKey());
-    }
-
-    // -------------------- SOCIAL DOMAIN --------------------
-    @Bean
-    public TopicExchange socialExchange() {
-        return new TopicExchange(topology.getSocial().getExchange(), true, false);
-    }
-
-    @Bean
-    public TopicExchange socialDlx() {
-        return new TopicExchange(topology.getSocial().getDlxExchange(), true, false);
-    }
-
-    @Bean
-    public Queue socialQueue() {
-        return QueueBuilder.durable(topology.getSocial().getQueue())
-                .withArgument("x-dead-letter-exchange", topology.getSocial().getDlxExchange())
-                .withArgument("x-dead-letter-routing-key", topology.getSocial().getRoutingKey())
-                .build();
-    }
-
-    @Bean
-    public Queue socialDlq() {
-        return QueueBuilder.durable(topology.getSocial().getDlqQueue()).build();
-    }
-
-    @Bean
-    public Binding socialBinding() {
-        return BindingBuilder.bind(socialQueue())
-                .to(socialExchange())
-                .with(topology.getSocial().getRoutingKey());
-    }
-
-    @Bean
-    public Binding socialDlqBinding() {
-        return BindingBuilder.bind(socialDlq())
-                .to(socialDlx())
-                .with(topology.getSocial().getRoutingKey());
-    }
+    // Tracking (streak.milestone) and Social (message.missed) used to declare queues and
+    // consumers here. Nothing ever published to either routing key — the producers were
+    // designed but never built — so the queues sat bound and permanently empty, and the
+    // consumers read as evidence that a feature existed. Removed until a producer exists.
 }

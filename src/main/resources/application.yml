@@ -136,18 +136,6 @@ notification:
       queue: notification.booking.booked.q
       dlx-exchange: booking.dlx
       dlq-queue: notification.booking.booked.dlq
-    tracking:
-      exchange: tracking.exchange
-      routing-key: streak.milestone
-      queue: notification.tracking.streak.q
-      dlx-exchange: tracking.dlx
-      dlq-queue: notification.tracking.streak.dlq
-    social:
-      exchange: social.exchange
-      routing-key: message.missed
-      queue: notification.social.message-missed.q
-      dlx-exchange: social.dlx
-      dlq-queue: notification.social.message-missed.dlq
 
 logging:
   level:

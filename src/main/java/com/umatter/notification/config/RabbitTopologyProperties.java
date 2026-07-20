@@ -10,8 +10,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class RabbitTopologyProperties {
 
     private Domain booking = new Domain();
-    private Domain tracking = new Domain();
-    private Domain social = new Domain();
 
     @Getter
     @Setter
