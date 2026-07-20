@@ -66,6 +66,10 @@ services:
       # Shared Auth Service broker, reached via the host gateway + published port.
       RABBITMQ_HOST: host.docker.internal
       RABBITMQ_PORT: "5671"
+      # Verification keys come from Auth's published key set, selected by kid, so a rotation
+      # at Auth needs no redeploy here. auth-service resolves over the umatter-shared network.
+      # (.env still carries JWT_PUBLIC_KEY; the decoder logs that it is ignoring it.)
+      JWT_JWKS_URI: http://auth-service:8081/internal/v1/.well-known/jwks.json
       REDIS_HOST: redis
       DB_URL: jdbc:postgresql://notification-postgres:5432/${DB_NAME:-notification}
       # Always bind to 8080 INSIDE the container. The host-side port is set

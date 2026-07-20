@@ -113,6 +113,9 @@ notification:
   # JWTs are issued by the Auth service and verified here with its RSA public key.
   # Keep these values in sync with the Auth service's mhsa.app.jwtIssuer / jwtAudience.
   jwt:
+    # Preferred: resolve verification keys from Auth's published key set, selected by kid.
+    # Falls back to the static public key when this is unset.
+    jwks-uri: ${JWT_JWKS_URI:}
     public-key: ${JWT_PUBLIC_KEY:}
     issuer: ${JWT_ISSUER:mhsa-auth}
     audience: ${JWT_AUDIENCE:mhsa-api}

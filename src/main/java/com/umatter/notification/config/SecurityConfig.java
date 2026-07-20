@@ -1,5 +1,7 @@
 package com.umatter.notification.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,28 +32,51 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+
     private final String publicKeyBase64;
+    private final String jwksUri;
     private final String issuer;
     private final String audience;
 
     public SecurityConfig(
-            @Value("${notification.jwt.public-key}") String publicKeyBase64,
+            @Value("${notification.jwt.public-key:}") String publicKeyBase64,
+            @Value("${notification.jwt.jwks-uri:}") String jwksUri,
             @Value("${notification.jwt.issuer}") String issuer,
             @Value("${notification.jwt.audience}") String audience) {
         this.publicKeyBase64 = publicKeyBase64;
+        this.jwksUri = jwksUri;
         this.issuer = issuer;
         this.audience = audience;
     }
 
+    /**
+     * Prefers Auth's published key set over a statically configured public key.
+     *
+     * <p>With a JWKS URI, Nimbus selects the verification key by the token's {@code kid} and
+     * refetches when it sees an unknown one, so a key rotation at Auth needs no redeploy here.
+     * The fetch is lazy — the first token triggers it — so Auth is not a startup dependency.
+     * The static-key branch remains for a deployment that has no JWKS endpoint to point at.
+     */
     @Bean
     public JwtDecoder jwtDecoder() {
-        if (publicKeyBase64 == null || publicKeyBase64.isBlank()) {
-            throw new IllegalStateException(
-                    "notification.jwt.public-key is not set — set JWT_PUBLIC_KEY in the environment");
-        }
+        NimbusJwtDecoder decoder;
 
-        RSAPublicKey publicKey = parseRsaPublicKey(publicKeyBase64);
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(publicKey).build();
+        if (jwksUri != null && !jwksUri.isBlank()) {
+            if (publicKeyBase64 != null && !publicKeyBase64.isBlank()) {
+                log.warn("Both notification.jwt.jwks-uri and notification.jwt.public-key are set; "
+                        + "the static key is ignored in favour of the published key set");
+            }
+            decoder = NimbusJwtDecoder.withJwkSetUri(jwksUri).build();
+            log.info("JWT verification keys will be resolved from JWKS at {}", jwksUri);
+        } else if (publicKeyBase64 != null && !publicKeyBase64.isBlank()) {
+            decoder = NimbusJwtDecoder.withPublicKey(parseRsaPublicKey(publicKeyBase64)).build();
+            log.info("JWT verification configured with a static RSA public key");
+        } else {
+            throw new IllegalStateException(
+                    "No JWT verification key configured — set notification.jwt.jwks-uri (JWT_JWKS_URI) "
+                            + "or notification.jwt.public-key (JWT_PUBLIC_KEY)");
+        }
 
         OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(issuer);
         OAuth2TokenValidator<Jwt> audienceValidator = jwt -> {
